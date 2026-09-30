@@ -4,43 +4,58 @@
 
 ## 项目结构
 
+采用 Keil 风格的分层目录（构建系统仍为 ESP-IDF / CMake，各层通过 `EXTRA_COMPONENT_DIRS` 注册为组件）：
+
 ```
 CF-Drone-main/
-├── main/                    # 主应用程序入口
-│   ├── main.cpp            # app_main() 和主循环
-│   ├── parameters.cpp      # NVS 参数存储
-│   ├── time.cpp            # 时间管理
-│   └── util.cpp            # 工具函数
-├── components/
-│   ├── cf_common/          # 通用头文件和数学库
-│   │   ├── globals.h       # 全局变量声明
-│   │   ├── vector.h        # 向量数学
-│   │   ├── quaternion.h    # 四元数数学
-│   │   ├── pid.h           # PID 控制器
-│   │   ├── lpf.h           # 低通滤波器
-│   │   └── board_config.h  # 板级配置
-│   ├── flight/             # 飞行控制
-│   │   ├── control.cpp     # 姿态和高度控制
-│   │   ├── estimate.cpp    # 姿态估计
-│   │   ├── motors.cpp      # 电机输出
-│   │   ├── led.cpp         # LED 状态灯
-│   │   └── safety.cpp      # 安全保护
-│   ├── sensors/            # 传感器驱动
-│   │   ├── imu.cpp         # MPU9250 IMU
-│   │   ├── battery.cpp     # 电池电压检测
-│   │   └── rc.cpp          # RC 接收机 (SBUS/CRSF)
-│   ├── drivers/            # 硬件驱动
-│   │   └── mpu9250.cpp     # MPU9250 SPI 驱动
-│   └── comms/              # 通信模块
-│       ├── cli.cpp         # 命令行接口
-│       ├── wifi.cpp        # WiFi 网络
-│       ├── mavlink.cpp     # MAVLink 协议
-│       ├── web_rc.cpp      # Web 遥控器
-│       └── log.cpp         # 数据日志
-├── CMakeLists.txt          # 项目构建配置
-├── sdkconfig.defaults      # ESP-IDF 默认配置
-└── partitions.csv          # Flash 分区表
+├── User/                       # 入口层：app_main() 与主循环
+│   └── main.cpp
+├── application/                # 应用层：飞行控制逻辑
+│   ├── control.cpp             # 姿态/高度控制、串级 PID
+│   ├── estimate.cpp            # 姿态估计（陀螺积分 + 加速度修正）
+│   ├── motors.cpp              # 电机混控与输出
+│   ├── safety.cpp              # 失控保护与安全阈值
+│   ├── led.cpp                 # LED 状态指示
+│   └── parameters.cpp          # NVS 参数存取
+├── Drivers/                    # 驱动层：具体外设
+│   ├── mpu9250.cpp / .h        # MPU9250 SPI 驱动
+│   ├── imu.cpp                 # IMU 数据读取与标定
+│   ├── rc.cpp                  # 遥控接收机 (SBUS/CRSF)
+│   └── battery.cpp             # 电池电压检测
+├── Bsp/                        # 板级支持层
+│   ├── board_config.h          # 引脚 / 特性宏定义
+│   ├── wifi.cpp                # WiFi AP/STA 与 UDP 遥控
+│   ├── web_rc.cpp              # Web 遥控接口
+│   ├── web_rc_html.h           # 内嵌网页资源
+│   └── espnow.cpp              # ESP-NOW 链路（默认未参与编译）
+├── Middlewares/                # 中间件层：与硬件无关
+│   ├── globals.h               # 全局变量 / 函数声明中心
+│   ├── vector.h                # 向量数学
+│   ├── quaternion.h            # 四元数数学
+│   ├── pid.h                   # PID 控制器
+│   ├── lpf.h                   # 低通滤波器
+│   ├── cf_common.cpp / cf_math.h
+│   ├── cli.cpp                 # 命令行接口
+│   ├── log.cpp                 # 数据日志
+│   ├── mavlink.cpp / mavlink_compat.h   # MAVLink 协议
+│   └── time.cpp / util.cpp     # 时间与工具函数
+├── docs/                       # 设计文档与仿真页面
+├── CMakeLists.txt              # 顶层构建配置（注册各层为组件）
+├── sdkconfig.defaults          # ESP-IDF 默认配置
+└── partitions.csv              # Flash 分区表
 ```
+
+### 分层依赖
+
+各层单向依赖，下层不感知上层：
+
+```
+User  →  application  →  Drivers  →  Bsp  →  Middlewares
+```
+
+- `Middlewares` 不依赖任何硬件抽象，只做数学、协议与工具
+- `Bsp` 负责板级差异（引脚、WiFi、Web 控制台）
+- `Drivers` 是具体外设驱动，通过 `Bsp/board_config.h` 的宏适配不同芯片
 
 ## 支持的硬件
 
@@ -86,7 +101,7 @@ source export.sh
 ### 编译项目
 
 ```bash
-cd /D/esp32/esp32project/CF-Drone-main
+cd CF-Drone-main
 
 # 对于 ESP32 (默认)
 idf.py set-target esp32
@@ -165,23 +180,49 @@ sys           - 显示系统信息
 3. **Flash 分区**：使用自定义分区表，预留空间存储参数和日志
 4. **ADC 精度**：电池电压使用 ESP32 内部 ADC，需要外部分压电路
 
+## 相关文档
+
+- [`HARDWARE_SETUP.md`](HARDWARE_SETUP.md) — 硬件连接与接线说明
+- [`MPU6050_Migration.md`](MPU6050_Migration.md) — 从 MPU6050 迁移到 MPU9250 的说明
+- [`MPU6500_Support.md`](MPU6500_Support.md) — MPU6500 支持说明
+- [`docs/学习方案.md`](docs/学习方案.md) — 代码学习路径
+- [`docs/mixer-pid-sim.html`](docs/mixer-pid-sim.html) — 混控与 PID 仿真页面
+
 ## 开发指南
 
-### 添加新组件
+### 添加新的源文件
 
-```bash
-mkdir components/new_component
-touch components/new_component/CMakeLists.txt
-touch components/new_component/new_component.cpp
-```
+1. 把 `.cpp` / `.h` 放到对应层次的目录（例如 `Drivers/`）
+2. 在该目录的 `CMakeLists.txt` 的 `SRCS` 中追加源文件
+3. 跨层调用通过 `REQUIRES` 声明依赖，并保持 `User → application → Drivers → Bsp → Middlewares` 的单向依赖
 
-在 `CMakeLists.txt` 中添加：
+以 `Drivers/` 为例：
 
 ```cmake
 idf_component_register(
-    SRCS "new_component.cpp"
+    SRCS
+        "mpu9250.cpp"
+        "imu.cpp"
+        "rc.cpp"
+        "battery.cpp"
+        "new_driver.cpp"      # 新增
     INCLUDE_DIRS "."
-    REQUIRES cf_common
+    REQUIRES Middlewares Bsp driver esp_timer esp_adc freertos log
+)
+```
+
+### 新增一个层 / 组件目录
+
+在顶层 `CMakeLists.txt` 的 `EXTRA_COMPONENT_DIRS` 中追加目录名即可，ESP-IDF 会把它注册为组件：
+
+```cmake
+set(EXTRA_COMPONENT_DIRS
+    Middlewares
+    Bsp
+    Drivers
+    application
+    User
+    NewLayer          # 新增
 )
 ```
 
@@ -193,7 +234,7 @@ idf_component_register(
 
 ## 许可证
 
-本项目遵循 MIT 许可证。详见 LICENSE 文件。
+本项目遵循 MIT 许可证。
 
 ## 致谢
 
