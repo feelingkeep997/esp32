@@ -1,0 +1,18 @@
+# ESP-IDF 构建产物
+build/
+sdkconfig.old
+
+# Python
+__pycache__/
+*.pyc
+
+# IDE
+.vscode/
+.clangd
+.agents/
+.workbuddy/
+.workbuddy-ai/
+
+# 本地临时文件
+*.log
+*.bak
